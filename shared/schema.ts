@@ -17,7 +17,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   profilePicture: text("profile_picture"),
-  joinDate: timestamp("join_date").defaultNow().notNull(),
+  joinDate: timestamp("join_date").defaultNow(),
 });
 
 // Movies table

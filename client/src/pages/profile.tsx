@@ -23,6 +23,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import type { ReviewWithUser } from "@shared/schema";
+import { datetime } from "drizzle-orm/mysql-core";
 
 export default function Profile() {
   const { id } = useParams<{ id: string }>();
@@ -149,7 +150,7 @@ export default function Profile() {
             <Avatar className="w-24 h-24" data-testid="profile-avatar">
               <AvatarImage src={user.profilePicture || undefined} />
               <AvatarFallback className="text-2xl">
-                {user.username.charAt(0).toUpperCase()}
+                {user.username.charAt(0).toUpperCase()||"?"}
               </AvatarFallback>
             </Avatar>
             
@@ -162,7 +163,9 @@ export default function Profile() {
                 <div className="flex items-center space-x-1">
                   <Calendar className="w-4 h-4" />
                   <span data-testid="profile-join-date">
-                    Joined {formatDistanceToNow(new Date(user.joinDate), { addSuffix: true })}
+                    Joined {user.joinDate
+                      ? `Joined ${formatDistanceToNow(new Date(user.joinDate), { addSuffix: true })}`
+                      : "Join date unknown"}
                   </span>
                 </div>
               </div>
@@ -265,48 +268,63 @@ export default function Profile() {
 
           {/* Watchlist Tab (Only for own profile) */}
           {isOwnProfile && (
-            <TabsContent value="watchlist" className="mt-6">
-              {watchlistLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                  {Array.from({ length: 10 }).map((_, index) => (
-                    <div key={index} className="space-y-3">
-                      <Skeleton className="h-64 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-3 w-1/2" />
-                    </div>
-                  ))}
-                </div>
-              ) : watchlist.length === 0 ? (
-                <div className="text-center py-12 bg-card rounded-lg" data-testid="no-watchlist">
-                  <BookmarkIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground mb-2">Your watchlist is empty.</p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Add movies to your watchlist to keep track of what you want to watch!
-                  </p>
-                  <Link href="/movies">
-                    <Button data-testid="button-browse-movies">Browse Movies</Button>
-                  </Link>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6" data-testid="watchlist-grid">
-                  {watchlist.map((item) => (
-                    <div key={item.id} className="relative group">
-                      <MovieCard movie={item.movie} showRating={false} />
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleRemoveFromWatchlist(item.movieId)}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        data-testid={`remove-${item.movieId}`}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          )}
+  <TabsContent value="watchlist" className="mt-6">
+    {watchlistLoading ? (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+        {Array.from({ length: 10 }).map((_, index) => (
+          <div key={index} className="space-y-3">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        ))}
+      </div>
+    ) : watchlist.length === 0 ? (
+      <div className="text-center py-12 bg-card rounded-lg" data-testid="no-watchlist">
+        <BookmarkIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <p className="text-muted-foreground mb-2">Your watchlist is empty.</p>
+        <p className="text-sm text-muted-foreground mb-4">
+          Add movies to your watchlist to keep track of what you want to watch!
+        </p>
+        <Link href="/movies">
+          <Button data-testid="button-browse-movies">Browse Movies</Button>
+        </Link>
+      </div>
+    ) : (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6" data-testid="watchlist-grid">
+        {watchlist.map((item) => {
+          // Map internal Movie -> MovieCard props
+          const movieCardProps = {
+           id: parseInt(item.movie.id, 10),
+            title: item.movie.title,
+           overview: item.movie.synopsis ?? "",
+           poster_path: item.movie.posterUrl ?? "",
+           backdrop_path: item.movie.backdropUrl ?? "",
+            release_date: `${item.movie.releaseYear}-01-01`,
+            vote_average: parseFloat(item.movie.averageRating ?? "0"),
+            genre_ids: [], // map your genre strings to TMDB IDs if needed
+};
+
+
+          return (
+            <div key={item.id} className="relative group">
+              <MovieCard movie={movieCardProps} />
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleRemoveFromWatchlist(item.movieId)}
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                data-testid={`remove-${item.movieId}`}
+              >
+                Remove
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </TabsContent>
+)}
         </Tabs>
       </div>
 

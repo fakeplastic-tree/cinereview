@@ -76,6 +76,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await storage.getMovies(params);
       res.json(result);
     } catch (error) {
+      
+      console.log(error);
       res.status(500).json({ message: "Failed to fetch movies" });
     }
   });
@@ -85,6 +87,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const movies = await storage.getFeaturedMovies();
       res.json(movies);
     } catch (error) {
+      
+      console.log(error);
       res.status(500).json({ message: "Failed to fetch featured movies" });
     }
   });
@@ -94,6 +98,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const movies = await storage.getTrendingMovies();
       res.json(movies);
     } catch (error) {
+      
+      console.log(error);
       res.status(500).json({ message: "Failed to fetch trending movies" });
     }
   });
@@ -106,6 +112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(movie);
     } catch (error) {
+      console.log(error);
       res.status(500).json({ message: "Failed to fetch movie" });
     }
   });
@@ -181,6 +188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { password, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
+      console.log(error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
@@ -190,6 +198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reviews = await storage.getUserReviews(req.params.id);
       res.json(reviews);
     } catch (error) {
+      console.log(error);
       res.status(500).json({ message: "Failed to fetch user reviews" });
     }
   });
@@ -199,6 +208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const watchlist = await storage.getUserWatchlist(req.params.id);
       res.json(watchlist);
     } catch (error) {
+      console.log(error);
       res.status(500).json({ message: "Failed to fetch watchlist" });
     }
   });
@@ -219,6 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const watchlistItem = await storage.addToWatchlist(watchlistData);
       res.status(201).json(watchlistItem);
     } catch (error) {
+      console.log(error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Invalid data" });
     }
   });
@@ -231,6 +242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.status(204).send();
     } catch (error) {
+      console.log(error);
       res.status(500).json({ message: "Failed to remove from watchlist" });
     }
   });
