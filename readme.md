@@ -18,11 +18,11 @@ Preferred communication style: Simple, everyday language.
 
 ## Backend Architecture
 - **Runtime**: Node.js with Express.js framework
-- **Database**: PostgreSQL with Drizzle ORM for type-safe database operations
+- **Database**: PostgreSQL with Prisma ORM for type-safe database operations
 - **API Design**: RESTful API with endpoints for movies, reviews, users, and watchlists
 - **Authentication**: Simple username/password authentication with localStorage persistence
 - **Data Validation**: Zod schemas for request/response validation
-- **Database Migrations**: Drizzle Kit for schema management and migrations
+- **Database Migrations**: Prisma Migrate for schema management and migrations
 
 ## Database Schema
 - **Users**: Username, email, password, profile information, and join date

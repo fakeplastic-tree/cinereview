@@ -1,64 +1,70 @@
-import { z } from "zod";
+export interface TMDBMovie {
+  id: number;
+  title: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  release_date: string;
+  vote_average: number;
+  genre_ids: number[];
+}
 
+export interface TMDBResponse {
+  results: TMDBMovie[];
+  total_pages: number;
+  total_results: number;
+}
 
-
-const tmdbMovieSchema = z.object({
-  id: z.number(),
-  title: z.string(),
-  overview: z.string(),
-  poster_path: z.string().nullable(),
-  backdrop_path: z.string().nullable(),
-  release_date: z.string(),
-  vote_average: z.number(),
-  genre_ids: z.array(z.number()),
-});
-
-const tmdbResponseSchema = z.object({
-  results: z.array(tmdbMovieSchema),
-  total_pages: z.number(),
-  total_results: z.number(),
-});
-
-export type TMDBMovie = z.infer<typeof tmdbMovieSchema>;
+export interface MovieDetails extends TMDBMovie {
+  runtime: number | null;
+  genres: { id: number; name: string }[];
+  credits: {
+    cast: { name: string }[];
+    crew: { name: string; job: string }[];
+  };
+  videos: {
+    results: { key: string; type: string }[];
+  };
+}
 
 export class TMDBService {
-  async getFeaturedMovies() {
+  async getFeaturedMovies(): Promise<TMDBMovie[]> {
     const TMDB_API_KEY = process.env.TMDB_API_KEY;
-const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL;
+    const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL;
     const response = await fetch(
       `${TMDB_API_BASE_URL}/movie/now_playing?api_key=${TMDB_API_KEY}&language=en-US&page=1`
     );
-    const data = await response.json();
-    return tmdbResponseSchema.parse(data).results;
+    const data: TMDBResponse = await response.json();
+    return data.results;
   }
 
-  async getTrendingMovies() {
+  async getTrendingMovies(): Promise<TMDBMovie[]> {
     const TMDB_API_KEY = process.env.TMDB_API_KEY;
-const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL;
+    const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL;
     const response = await fetch(
       `${TMDB_API_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}`
     );
-    const data = await response.json();
-    return tmdbResponseSchema.parse(data).results;
+    const data: TMDBResponse = await response.json();
+    return data.results;
   }
 
-  async searchMovies(query: string, page: number = 1) {
+  async searchMovies(query: string, page: number = 1): Promise<TMDBResponse> {
     const TMDB_API_KEY = process.env.TMDB_API_KEY;
-const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL;
+    const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL;
     const response = await fetch(
       `${TMDB_API_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${query}&page=${page}`
     );
-    const data = await response.json();
-    return tmdbResponseSchema.parse(data);
+    const data: TMDBResponse = await response.json();
+    return data;
   }
 
-  async getMovieDetails(id: string) {
+  async getMovieDetails(id: number): Promise<MovieDetails> {
     const TMDB_API_KEY = process.env.TMDB_API_KEY;
-const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL;
+    const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL;
     const response = await fetch(
       `${TMDB_API_BASE_URL}/movie/${id}?api_key=${TMDB_API_KEY}&append_to_response=credits,videos`
     );
-    const data = await response.json();
+    const data: MovieDetails = await response.json();
     return data;
   }
 }

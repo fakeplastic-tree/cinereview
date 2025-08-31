@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import dotenv from 'dotenv';
+import { seed } from "./seed";
+import { Storage } from "./storage";
 
 dotenv.config();
 console.log(process.env.TMDB_API_BASE_URL);
@@ -43,6 +45,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  if (app.get("env") === "development") {
+    await seed(new Storage());
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -69,7 +75,7 @@ app.use((req, res, next) => {
   const PORT = Number(process.env.PORT) || 5000;
   const HOST = process.env.HOST || "0.0.0.0";
 
-  app.listen(PORT, HOST, () => {
+  server.listen(PORT, HOST, () => {
     console.log(`Server running at http://${HOST}:${PORT}`);
   });
 })();

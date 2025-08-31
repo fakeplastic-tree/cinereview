@@ -1,8 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { Storage } from "./storage";
 import { insertUserSchema, insertReviewSchema, insertWatchlistSchema } from "@shared/schema";
 import { z } from "zod";
+import bcrypt from "bcrypt";
+
+const storage = new Storage();
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -12,43 +15,59 @@ const loginSchema = z.object({
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.post("/api/auth/register", async (req, res) => {
-    try {
-      const userData = insertUserSchema.parse(req.body);
-      
-      // Check if user already exists
-      const existingUser = await storage.getUserByUsername(userData.username);
-      if (existingUser) {
-        return res.status(400).json({ message: "Username already exists" });
-      }
+  try {
+    const userData = insertUserSchema.parse(req.body);
 
-      const existingEmail = await storage.getUserByEmail(userData.email);
-      if (existingEmail) {
-        return res.status(400).json({ message: "Email already exists" });
-      }
-
-      const user = await storage.createUser(userData);
-      const { password, ...userWithoutPassword } = user;
-      res.status(201).json(userWithoutPassword);
-    } catch (error) {
-      res.status(400).json({ message: error instanceof Error ? error.message : "Invalid data" });
+    const existingUser = await storage.getUserByUsername(userData.username);
+    if (existingUser) {
+      return res.status(400).json({ message: "Username already exists" });
     }
-  });
+
+    const existingEmail = await storage.getUserByEmail(userData.email);
+    if (existingEmail) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(userData.password, 10);
+
+    const user = await storage.createUser({
+      ...userData,
+      password: hashedPassword,
+    });
+
+    const { password, ...userWithoutPassword } = user;
+    res.status(201).json(userWithoutPassword);
+  } catch (error) {
+    res
+      .status(400)
+      .json({ message: error instanceof Error ? error.message : "Invalid data" });
+  }
+});
+
 
   app.post("/api/auth/login", async (req, res) => {
-    try {
-      const { username, password } = loginSchema.parse(req.body);
-      
-      const user = await storage.getUserByUsername(username);
-      if (!user || user.password !== password) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
+  try {
+    const { username, password } = loginSchema.parse(req.body);
 
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
-    } catch (error) {
-      res.status(400).json({ message: error instanceof Error ? error.message : "Invalid data" });
+    const user = await storage.getUserByUsername(username);
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
-  });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const { password: _, ...userWithoutPassword } = user;
+    res.json(userWithoutPassword);
+  } catch (error) {
+    res
+      .status(400)
+      .json({ message: error instanceof Error ? error.message : "Invalid data" });
+  }
+});
+
 
   // Movie routes
   app.get("/api/movies", async (req, res) => {
@@ -221,7 +240,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Check if already in watchlist
-      const exists = await storage.isInWatchlist(watchlistData.userId, watchlistData.movieId);
+      const watchlist = await storage.getUserWatchlist(watchlistData.userId);
+      const exists = watchlist.some(item => item.movieId === watchlistData.movieId);
       if (exists) {
         return res.status(400).json({ message: "Movie already in watchlist" });
       }

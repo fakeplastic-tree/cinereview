@@ -1,245 +1,177 @@
-import {
-  type User,
-  type InsertUser,
-  type Movie,
-  type InsertMovie,
-  type Review,
-  type InsertReview,
-  type Watchlist,
-  type InsertWatchlist,
-  type ReviewWithUser
-} from "@shared/schema";
-import { randomUUID } from "crypto";
-import { tmdbService } from "./services/tmdb";
+import { PrismaClient, User, Movie, Review, Genre } from '@prisma/client';
+import { InsertUser, InsertMovie, InsertReview, InsertWatchlist } from '@shared/schema';
+import { tmdbService } from './services/tmdb';
 
-function buildTMDBImageUrl(path: string | null, size: string = "w500"): string {
-  return path ? `https://image.tmdb.org/t/p/${size}${path.startsWith("/") ? path : `/${path}`}` : "";
-}
+const prisma = new PrismaClient();
 
-export interface IStorage {
-  // Users
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+// Helper function to map TMDB genre IDs to your Genre enum
+const mapTmdbGenreToEnum = (genreId: number): Genre | undefined => {
+  const genreMap: { [key: number]: Genre } = {
+    28: 'ACTION',
+    12: 'ADVENTURE',
+    16: 'ANIMATION',
+    35: 'COMEDY',
+    80: 'CRIME',
+    99: 'DOCUMENTARY',
+    18: 'DRAMA',
+    10751: 'FAMILY',
+    14: 'FANTASY',
+    36: 'HISTORY',
+    27: 'HORROR',
+    10402: 'MUSIC',
+    9648: 'MYSTERY',
+    10749: 'ROMANCE',
+    878: 'SCIENCE_FICTION',
+    53: 'THRILLER',
+    10752: 'WAR',
+    37: 'WESTERN',
+  };
+  return genreMap[genreId];
+};
 
-  // Movies
-  getMovies(params?: {
-    search?: string;
-    genre?: string;
-    year?: number;
-    minRating?: number;
-    sort?: "title" | "year" | "rating" | "reviews";
-    page?: number;
-    limit?: number;
-  }): Promise<{ movies: Movie[]; total: number }>;
-  getMovie(id: string): Promise<Movie | undefined>;
-  getFeaturedMovies(): Promise<Movie[]>;
-  getTrendingMovies(): Promise<Movie[]>;
-  createMovie(movie: InsertMovie): Promise<Movie>;
-  updateMovie(id: string, updates: Partial<Movie>): Promise<Movie | undefined>;
 
-  // Reviews
-  getReviews(movieId: string): Promise<ReviewWithUser[]>;
-  createReview(review: InsertReview): Promise<Review>;
-  updateReview(id: string, updates: Partial<Review>): Promise<Review | undefined>;
-  deleteReview(id: string): Promise<boolean>;
-  likeReview(reviewId: string): Promise<boolean>;
-
-  // Watchlist
-  getUserWatchlist(userId: string): Promise<(Watchlist & { movie: Movie })[]>;
-  addToWatchlist(watchlistItem: InsertWatchlist): Promise<Watchlist>;
-  removeFromWatchlist(userId: string, movieId: string): Promise<boolean>;
-}
-
-export class Storage implements IStorage {
-  private users: Map<string, User> = new Map();
-  private movies: Map<string, Movie> = new Map();
-  private reviews: Map<string, Review> = new Map();
-  private watchlists: Map<string, Watchlist> = new Map();
-
-  // --- User methods ---
-  async getUser(id: string) {
-    return this.users.get(id);
-  }
-  async getUserByUsername(username: string) {
-    return Array.from(this.users.values()).find(u => u.username === username);
-  }
-  async getUserByEmail(email: string) {
-    return Array.from(this.users.values()).find(u => u.email === email);
-  }
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = {
-      ...insertUser,
-      id,
-      joinDate: new Date(),
-      profilePicture: insertUser.profilePicture ?? "",
-    };
-    this.users.set(id, user);
-    return user;
-  }
-  async updateUser(id: string, updates: Partial<User>) {
-    const user = this.users.get(id);
-    if (!user) return undefined;
-    const updated = { ...user, ...updates };
-    this.users.set(id, updated);
-    return updated;
+export class Storage {
+  // User methods
+  async createUser(user: InsertUser): Promise<User> {
+    return prisma.user.create({ data: user });
   }
 
-  // --- Movie methods ---
-  async getMovies(params: { search?: string; genre?: string; year?: number; minRating?: number; sort?: "title" | "year" | "rating" | "reviews"; page?: number; limit?: number } = {}) {
-    let movies = Array.from(this.movies.values());
-
-    if (params.search) {
-      const search = params.search.toLowerCase();
-      movies = movies.filter(m =>
-        m.title.toLowerCase().includes(search) ||
-        m.director.toLowerCase().includes(search) ||
-        m.cast.some(actor => actor.toLowerCase().includes(search))
-      );
-    }
-
-    if (params.genre) movies = movies.filter(m => m.genres.includes(params.genre as any));
-    if (params.year) movies = movies.filter(m => m.releaseYear === params.year);
-    if (params.minRating !== undefined) {
-      movies = movies.filter(
-        m => parseFloat(m.averageRating ?? "0") >= params.minRating!
-      );
-    }
-
-    // Sorting
-    if (params.sort) {
-      switch (params.sort) {
-        case "title": movies.sort((a, b) => a.title.localeCompare(b.title)); break;
-        case "year": movies.sort((a, b) => b.releaseYear - a.releaseYear); break;
-        case "rating": movies.sort((a, b) => parseFloat(b.averageRating ?? "0") - parseFloat(a.averageRating ?? "0")); break;
-        case "reviews": movies.sort((a, b) => b.reviewCount - a.reviewCount); break;
-      }
-    }
-
-    const total = movies.length;
-    const page = params.page ?? 1;
-    const limit = params.limit ?? 20;
-    const start = (page - 1) * limit;
-    const end = start + limit;
-    return { movies: movies.slice(start, end), total };
+  async getUserByUsername(username: string): Promise<User | null> {
+    return prisma.user.findUnique({ where: { username } });
   }
 
-  async getMovie(id: string) {
-    const movie = this.movies.get(id);
-    if (movie) return movie;
-    // fallback: fetch from TMDB
-    const tmdb = await tmdbService.getMovieDetails(id);
-    if (!tmdb) return undefined;
-    return this.mapTMDBToMovie(tmdb);
+  async getUserByEmail(email: string): Promise<User | null> {
+    return prisma.user.findUnique({ where: { email } });
   }
 
-  async getFeaturedMovies() {
-    const tmdb = await tmdbService.getFeaturedMovies();
-    return tmdb.map(this.mapTMDBToMovie);
+  async getUser(id: string): Promise<User | null> {
+    return prisma.user.findUnique({ where: { id } });
   }
 
-  async getTrendingMovies() {
-    const tmdb = await tmdbService.getTrendingMovies();
-    return tmdb.map(this.mapTMDBToMovie);
+  // Movie methods
+  async createMovie(movie: InsertMovie): Promise<Movie> {
+    return prisma.movie.create({ data: movie });
   }
 
-  async createMovie(insertMovie: InsertMovie): Promise<Movie> {
-    const id = randomUUID();
-    const movie: Movie = {
-      ...insertMovie,
-      id,
-      averageRating: "0",
-      reviewCount: 0,
-      createdAt: new Date(),
-      backdropUrl: insertMovie.backdropUrl ?? "",
-      trailerUrl: insertMovie.trailerUrl ?? "",
-      featured: insertMovie.featured ?? false,
-      trending: insertMovie.trending ?? false,
-    };
-    this.movies.set(id, movie);
-    return movie;
+  async getMovieByTmdbId(tmdbId: number): Promise<Movie | null> {
+    return prisma.movie.findUnique({ where: { tmdbId } });
   }
 
-  async updateMovie(id: string, updates: Partial<Movie>) {
-    const movie = this.movies.get(id);
-    if (!movie) return undefined;
-    const updated = { ...movie, ...updates };
-    this.movies.set(id, updated);
-    return updated;
+  async getMovies(params: { search?: string; genre?: string; year?: number; minRating?: number; sort?: 'title' | 'year' | 'rating' | 'reviews'; page?: number; limit?: number; }): Promise<{ movies: Movie[], total: number }> {
+    const { search, genre, year, minRating, sort, page = 1, limit = 20 } = params;
+    const where: any = {};
+    if (search) where.title = { contains: search, mode: 'insensitive' };
+    if (genre) where.genres = { has: genre as Genre };
+    if (year) where.releaseYear = year;
+    if (minRating) where.averageRating = { gte: minRating };
+
+    const movies = await prisma.movie.findMany({
+      where,
+      orderBy: { [sort || 'title']: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    const total = await prisma.movie.count({ where });
+    return { movies, total };
   }
 
-  // --- Review methods ---
-  async getReviews(movieId: string) {
-    const reviews = Array.from(this.reviews.values()).filter(r => r.movieId === movieId);
-    const reviewsWithUser: ReviewWithUser[] = [];
-    for (const r of reviews) {
-      const user = await this.getUser(r.userId);
-      const movie = this.movies.get(r.movieId);
-      if (user && movie) {
-        reviewsWithUser.push({
-          ...r,
-          user: { id: user.id, username: user.username, profilePicture: user.profilePicture },
-          movie: { id: movie.id, title: movie.title, posterUrl: movie.posterUrl },
+  async getFeaturedMovies(): Promise<Movie[]> {
+    const featuredMovies = await tmdbService.getFeaturedMovies();
+    for (const movie of featuredMovies) {
+      const existingMovie = await prisma.movie.findFirst({ where: { tmdbId: movie.id } });
+      if (!existingMovie) {
+        const movieDetails = await tmdbService.getMovieDetails(movie.id);
+        await this.createMovie({
+          tmdbId: movie.id,
+          title: movie.title,
+          synopsis: movie.overview,
+          director: movieDetails.credits.crew.find(c => c.job === 'Director')?.name || '',
+          cast: movieDetails.credits.cast.map(c => c.name).slice(0, 10),
+          genres: movie.genre_ids.map(mapTmdbGenreToEnum).filter((g) => g !== undefined) as Genre[],
+          releaseYear: new Date(movie.release_date).getFullYear(),
+          duration: movieDetails.runtime,
+          posterUrl: `https://image.tmdb.org/t/p/w500${movie.poster_path}`,
+          backdropUrl: `https://image.tmdb.org/t/p/original${movie.backdrop_path}`,
+          trailerUrl: movieDetails.videos.results.find(v => v.type === 'Trailer')?.key || '',
+          averageRating: movie.vote_average / 2,
+          featured: true,
+          trending: false,
         });
       }
     }
-    return reviewsWithUser.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return prisma.movie.findMany({ where: { featured: true } });
   }
 
-  async createReview(review: InsertReview) { /* similar to old code */ return {} as Review; }
-  async updateReview(id: string, updates: Partial<Review>) { return {} as Review; }
-  async deleteReview(id: string) { return true; }
-  async likeReview(reviewId: string) { return true; }
-
-  // --- Watchlist methods ---
-  async getUserWatchlist(userId: string) {
-    const list = Array.from(this.watchlists.values()).filter(w => w.userId === userId);
-    const result: (Watchlist & { movie: Movie })[] = [];
-    for (const item of list) {
-      const movie = this.movies.get(item.movieId);
-      if (movie) result.push({ ...item, movie });
+  async getTrendingMovies(): Promise<Movie[]> {
+    const trendingMovies = await tmdbService.getTrendingMovies();
+    for (const movie of trendingMovies) {
+      const existingMovie = await prisma.movie.findFirst({ where: { tmdbId: movie.id } });
+      if (!existingMovie) {
+        const movieDetails = await tmdbService.getMovieDetails(movie.id);
+        await this.createMovie({
+          tmdbId: movie.id,
+          title: movie.title,
+          synopsis: movie.overview,
+          director: movieDetails.credits.crew.find(c => c.job === 'Director')?.name || '',
+          cast: movieDetails.credits.cast.map(c => c.name).slice(0, 10),
+          genres: movie.genre_ids.map(mapTmdbGenreToEnum).filter((g) => g !== undefined) as Genre[],
+          releaseYear: new Date(movie.release_date).getFullYear(),
+          duration: movieDetails.runtime,
+          posterUrl: `https://image.tmdb.org/t/p/w500${movie.poster_path}`,
+          backdropUrl: `https://image.tmdb.org/t/p/original${movie.backdrop_path}`,
+          trailerUrl: movieDetails.videos.results.find(v => v.type === 'Trailer')?.key || '',
+          averageRating: movie.vote_average / 2,
+          trending: true,
+          featured: false,
+        });
+      }
     }
-    return result;
+    return prisma.movie.findMany({ where: { trending: true } });
   }
 
-  async addToWatchlist(watchlistItem: InsertWatchlist) {
-    const id = randomUUID();
-    const item: Watchlist = { ...watchlistItem, id, addedAt: new Date() };
-    this.watchlists.set(id, item);
-    return item;
+  async getMovie(id: string): Promise<(Movie & { reviews: (Review & { user: Pick<User, 'id' | 'username' | 'profilePicture'> })[] }) | null> {
+    return prisma.movie.findUnique({ where: { id }, include: { reviews: { include: { user: { select: { id: true, username: true, profilePicture: true } } } } } });
   }
 
-  async removeFromWatchlist(userId: string, movieId: string) {
-    const entry = Array.from(this.watchlists.entries()).find(([, w]) => w.userId === userId && w.movieId === movieId);
-    if (!entry) return false;
-    this.watchlists.delete(entry[0]);
+  // Review methods
+  async getReviews(movieId: string): Promise<Review[]> {
+    return prisma.review.findMany({ where: { movieId } });
+  }
+
+  async createReview(review: InsertReview): Promise<Review> {
+    return prisma.review.create({ data: review });
+  }
+
+  async updateReview(id: string, updates: Partial<InsertReview>): Promise<Review | null> {
+    return prisma.review.update({ where: { id }, data: updates });
+  }
+
+  async deleteReview(id: string): Promise<boolean> {
+    await prisma.review.delete({ where: { id } });
     return true;
   }
 
-  // --- Helpers ---
-  private mapTMDBToMovie(tmdb: any): Movie {
-    return {
-      id: tmdb.id.toString(),
-      title: tmdb.title ?? "",
-      synopsis: tmdb.overview ?? "",
-      director: "Unknown",
-      cast: [],
-      genres: [],
-      releaseYear: tmdb.release_date ? parseInt(tmdb.release_date.substring(0, 4)) : 0,
-      duration: 0,
-      posterUrl: buildTMDBImageUrl(tmdb.poster_path, "w300"),
-      backdropUrl: buildTMDBImageUrl(tmdb.backdrop_path, "w1200"),
-      trailerUrl: "",
-      averageRating: tmdb.vote_average?.toFixed(1) ?? "0",
-      reviewCount: 0,
-      featured: tmdb.featured ?? false,
-      trending: tmdb.trending ?? false,
-      createdAt: new Date(),
-    };
+  async likeReview(id: string): Promise<boolean> {
+    await prisma.review.update({ where: { id }, data: { likes: { increment: 1 } } });
+    return true;
+  }
+
+  async getUserReviews(userId: string): Promise<Review[]> {
+    return prisma.review.findMany({ where: { userId } });
+  }
+
+  // Watchlist methods
+  async getUserWatchlist(userId: string): Promise<any[]> {
+    return prisma.watchlist.findMany({ where: { userId }, include: { movie: true } });
+  }
+
+  async addToWatchlist(watchlistData: InsertWatchlist): Promise<any> {
+    return prisma.watchlist.create({ data: watchlistData });
+  }
+
+  async removeFromWatchlist(userId: string, movieId: string): Promise<boolean> {
+    await prisma.watchlist.deleteMany({ where: { userId, movieId } });
+    return true;
   }
 }
-
-export const storage = new Storage();
